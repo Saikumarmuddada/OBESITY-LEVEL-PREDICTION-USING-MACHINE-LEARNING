@@ -1,0 +1,1248 @@
+
+Using Machine Learning to Classify Obesity Levels Based on Lifestyle and Physical Condition
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix
+
+# Load the dataset
+file_path = '/content/ObesityDataSet_raw_and_data_sinthetic.csv'
+df = pd.read_csv(file_path)
+
+# Display the first 5 rows
+df.head()
+     
+Data Exploration and Visualization
+Before jumping into modeling, we need to check for missing values and understand the distribution of our target variable (NObeyesdad).
+
+
+# Check for missing values and data types
+print(df.info())
+
+# Visualize the distribution of the target variable
+plt.figure(figsize=(12, 6))
+sns.countplot(data=df, x='NObeyesdad')
+plt.xticks(rotation=45)
+plt.title('Distribution of Obesity Levels')
+plt.show()
+     
+Data Integrity & Cleaning
+This section ensures the reliability of our analysis by identifying and removing any inconsistent data points, such as duplicate records or missing entries.
+
+
+# Check for missing values
+print("--- Missing Values Check ---")
+print(df.isnull().sum())
+
+# Check for duplicate entries
+duplicates_count = df.duplicated().sum()
+print(f"\n--- Duplicate Entries Check ---")
+print(f"Number of duplicate rows found: {duplicates_count}")
+
+# Address duplicates: Remove duplicates to ensure each observation is unique
+if duplicates_count > 0:
+    df = df.drop_duplicates()
+    print(f"Successfully removed {duplicates_count} duplicates.")
+    print(f"New dataset shape: {df.shape}")
+else:
+    print("No duplicates found. Dataset integrity is intact.")
+     
+Enhanced Distribution Analysis (Histograms)
+Unlike simple bar graphs, histograms allow us to see the continuous spread of numerical data. By adjusting the bin size, we can clearly identify "zero values" or ranges where no data exists, which is crucial for identifying sampling gaps.
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Define numerical columns for histogram analysis
+num_cols = ['Age', 'Height', 'Weight', 'FCVC', 'NCP', 'CH2O', 'FAF', 'TUE']
+
+# Set the theme and color palette
+sns.set_theme(style="whitegrid")
+# Using a distinct palette to differentiate the 7 obesity categories
+palette = sns.color_palette("husl", 7)
+
+# Create a grid of histograms broken down by Weight Category (NObeyesdad)
+plt.figure(figsize=(20, 18))
+
+for i, col in enumerate(num_cols):
+    plt.subplot(3, 3, i+1)
+
+    # Use hue to separate by class
+    # common_norm=False ensures the area of each class's KDE sums to 1,
+    # making comparisons of distribution shape easier regardless of sample size.
+    sns.histplot(
+        data=df,
+        x=col,
+        hue='NObeyesdad',
+        element="step",
+        kde=True,
+        palette=palette,
+        common_norm=False,
+        alpha=0.3
+    )
+
+    plt.title(f'Class-wise Distribution of {col}', fontsize=14, fontweight='bold')
+    plt.xlabel(col)
+    plt.ylabel('Density')
+
+    # Relocate legend to avoid overlapping the data
+    if i == 0:
+        sns.move_legend(plt.gca(), "upper right", bbox_to_anchor=(1, 1), fontsize='small', title='Obesity Level')
+    else:
+        plt.gca().get_legend().remove()
+
+plt.tight_layout()
+plt.suptitle(' Multi-class Distribution Analysis of Health and Lifestyle Metrics', fontsize=20, y=1.02)
+plt.show()
+     
+Lifestyle Breakdown by Weight Category
+To understand the relationship between habits and obesity levels, we analyze specific lifestyles (Physical Activity, Eating Habits, and Transportation) across the different weight categories.
+
+
+# 1. Physical Activity Frequency (FAF) across Obesity Levels
+plt.figure(figsize=(14, 6))
+sns.boxplot(data=df, x='NObeyesdad', y='FAF', hue='Gender', palette='Set2')
+plt.xticks(rotation=45)
+plt.title('Physical Activity Frequency (FAF) vs. Obesity Levels', fontsize=14)
+plt.xlabel('Weight Category')
+plt.ylabel('Days of Physical Activity per Week')
+plt.legend(title='Gender', loc='upper right')
+plt.show()
+
+# 2. Lifestyle Habits: High Caloric Food Consumption (FAVC) by Weight Category
+plt.figure(figsize=(14, 6))
+# Creating a cross-tabulation for a stacked bar look
+lifestyle_cross = pd.crosstab(df['NObeyesdad'], df['FAVC'], normalize='index') * 100
+lifestyle_cross.plot(kind='bar', stacked=True, figsize=(14, 6), color=['#ff9999','#66b3ff'])
+
+plt.title('High Caloric Food Consumption (FAVC) Breakdown (%)', fontsize=14)
+plt.xlabel('Weight Category')
+plt.ylabel('Percentage of Respondents')
+plt.xticks(rotation=45)
+plt.legend(title='Eat High Caloric Food Frequently?', labels=['No', 'Yes'])
+plt.show()
+
+# 3. Transportation Choice and Obesity Levels
+plt.figure(figsize=(14, 6))
+sns.countplot(data=df, x='MTRANS', hue='NObeyesdad', palette='viridis')
+plt.title('Mode of Transportation across Weight Categories', fontsize=14)
+plt.xlabel('Mode of Transport')
+plt.ylabel('Count')
+plt.legend(title='Obesity Level', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.show()
+     
+Feature Engineering and Preprocessing
+The dataset contains several categorical columns (like Gender, Family History, etc.). We will use Label Encoding for the categorical variables and split the data into training and testing sets.
+
+
+# Encoding categorical variables
+le = LabelEncoder()
+categorical_cols = df.select_dtypes(include=['object']).columns
+
+for col in categorical_cols:
+    df[col] = le.fit_transform(df[col])
+
+# Splitting features and target
+X = df.drop('NObeyesdad', axis=1)
+y = df['NObeyesdad']
+
+# Split into 80% training and 20% testing
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+print(f"Training shape: {X_train.shape}")
+print(f"Testing shape: {X_test.shape}")
+     
+
+# Initialize the StandardScaler
+scaler = StandardScaler()
+
+# List of numerical columns to scale (excluding the target if it was encoded)
+# In this dataset, most features are now numeric after LabelEncoding
+numerical_features = X_train.columns
+
+# Fit on training data and transform both sets
+X_train_scaled = X_train.copy()
+X_test_scaled = X_test.copy()
+
+X_train_scaled[numerical_features] = scaler.fit_transform(X_train[numerical_features])
+X_test_scaled[numerical_features] = scaler.transform(X_test[numerical_features])
+
+# Verify the scaling
+print("Mean of scaled training data (should be ~0):", np.mean(X_train_scaled.iloc[:, 0]))
+print("Std deviation of scaled training data (should be ~1):", np.std(X_train_scaled.iloc[:, 0]))
+
+# Preview the scaled features
+X_train_scaled.head()
+     
+Machine Learning Model
+Random Forest - Training and Comprehensive Evaluation
+This cell trains the Random Forest classifier, measures training/testing time, calculates overall and per-class metrics, and visualizes the results with a Confusion Matrix and ROC Curves.
+
+
+import time
+from sklearn.metrics import (accuracy_score, precision_score, recall_score,
+                             f1_score, confusion_matrix, roc_curve, auc,
+                             precision_recall_fscore_support)
+from sklearn.preprocessing import label_binarize
+
+# 1. Training with Timing
+start_train = time.time()
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 2. Testing with Timing
+start_test = time.time()
+rf_preds = rf_model.predict(X_test_scaled)
+rf_probs = rf_model.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 3. Overall Performance Metrics
+accuracy = accuracy_score(y_test, rf_preds)
+weighted_precision = precision_score(y_test, rf_preds, average='weighted')
+weighted_recall = recall_score(y_test, rf_preds, average='weighted')
+weighted_f1 = f1_score(y_test, rf_preds, average='weighted')
+macro_f1 = f1_score(y_test, rf_preds, average='macro')
+
+# 4. Printing Detailed Results
+print(f"=== Random Forest Performance Summary ===")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:  {accuracy:.4f}")
+print(f"Weighted Precision: {weighted_precision:.4f}")
+print(f"Weighted Recall:    {weighted_recall:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1:.4f}")
+print(f"Macro F1-Score:     {macro_f1:.4f}")
+print("-" * 45)
+
+# Per-Class Metrics Table
+class_names = le.classes_
+p, r, f, _ = precision_recall_fscore_support(y_test, rf_preds, average=None)
+metrics_df = pd.DataFrame({'Class': class_names, 'Precision': p, 'Recall': r, 'F1-Score': f})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix with BOLD annotations
+cm = confusion_matrix(y_test, rf_preds)
+sns.heatmap(cm,
+            annot=True,
+            fmt='d',
+            cmap='Blues',
+            ax=ax[0],
+            xticklabels=class_names,
+            yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12}) # <--- THIS BOLDS THE NUMBERS
+
+ax[0].set_title('Confusion Matrix (Class Names)')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+y_test_bin = label_binarize(y_test, classes=range(len(class_names)))
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], rf_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('Per-Class ROC Curves')
+ax[1].set_xlabel('False Positive Rate')
+ax[1].set_ylabel('True Positive Rate')
+ax[1].legend(loc='lower right', fontsize='small')
+
+plt.tight_layout()
+plt.show()
+     
+
+
+     
+Support Vector Machine (SVM) - Training and Evaluation
+This cell trains the SVM model with a linear kernel. SVM is particularly effective at finding the optimal boundary between different obesity categories.
+
+
+from sklearn.svm import SVC
+
+# 1. Training with Timing
+start_train = time.time()
+# probability=True is required to plot the ROC curve later
+svm_model = SVC(kernel='linear', probability=True, random_state=42)
+svm_model.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 2. Testing with Timing
+start_test = time.time()
+svm_preds = svm_model.predict(X_test_scaled)
+svm_probs = svm_model.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 3. Overall Performance Metrics
+accuracy = accuracy_score(y_test, svm_preds)
+weighted_precision = precision_score(y_test, svm_preds, average='weighted')
+weighted_recall = recall_score(y_test, svm_preds, average='weighted')
+weighted_f1 = f1_score(y_test, svm_preds, average='weighted')
+macro_f1 = f1_score(y_test, svm_preds, average='macro')
+
+# 4. Printing Detailed Results
+print(f"=== SVM Performance Summary ===")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:   {accuracy:.4f}")
+print(f"Weighted Precision: {weighted_precision:.4f}")
+print(f"Weighted Recall:    {weighted_recall:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1:.4f}")
+print(f"Macro F1-Score:     {macro_f1:.4f}")
+print("-" * 45)
+
+# Per-Class Metrics Table
+p, r, f, _ = precision_recall_fscore_support(y_test, svm_preds, average=None)
+metrics_df = pd.DataFrame({'Class': class_names, 'Precision': p, 'Recall': r, 'F1-Score': f})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix with BOLD annotations
+cm = confusion_matrix(y_test, svm_preds)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Oranges', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('SVM Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], svm_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('SVM Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.tight_layout()
+plt.show()
+     
+Logistic Regression - Training and Evaluation
+This cell evaluate Logistic Regression. It is a linear model that is often very efficient in terms of training time while maintaining high accuracy on scaled datasets.
+
+
+from sklearn.linear_model import LogisticRegression
+
+# 1. Training with Timing
+start_train = time.time()
+lr_model = LogisticRegression(max_iter=1000, random_state=42)
+lr_model.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 2. Testing with Timing
+start_test = time.time()
+lr_preds = lr_model.predict(X_test_scaled)
+lr_probs = lr_model.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 3. Overall Performance Metrics
+accuracy = accuracy_score(y_test, lr_preds)
+weighted_precision = precision_score(y_test, lr_preds, average='weighted')
+weighted_recall = recall_score(y_test, lr_preds, average='weighted')
+weighted_f1 = f1_score(y_test, lr_preds, average='weighted')
+macro_f1 = f1_score(y_test, lr_preds, average='macro')
+
+# 4. Printing Detailed Results
+print(f"=== Logistic Regression Performance Summary ===")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:   {accuracy:.4f}")
+print(f"Weighted Precision: {weighted_precision:.4f}")
+print(f"Weighted Recall:    {weighted_recall:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1:.4f}")
+print(f"Macro F1-Score:     {macro_f1:.4f}")
+print("-" * 45)
+
+# Per-Class Metrics Table
+p, r, f, _ = precision_recall_fscore_support(y_test, lr_preds, average=None)
+metrics_df = pd.DataFrame({'Class': class_names, 'Precision': p, 'Recall': r, 'F1-Score': f})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix with BOLD annotations
+cm = confusion_matrix(y_test, lr_preds)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Purples', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('LR Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], lr_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('LR Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.tight_layout()
+plt.show()
+     
+K-Nearest Neighbors (KNN)
+
+from sklearn.neighbors import KNeighborsClassifier
+
+# 1. Training with Timing
+start_train = time.time()
+knn_model = KNeighborsClassifier(n_neighbors=5)
+knn_model.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 2. Testing with Timing
+start_test = time.time()
+knn_preds = knn_model.predict(X_test_scaled)
+knn_probs = knn_model.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 3. Overall Performance Metrics
+accuracy = accuracy_score(y_test, knn_preds)
+weighted_precision = precision_score(y_test, knn_preds, average='weighted')
+weighted_recall = recall_score(y_test, knn_preds, average='weighted')
+weighted_f1 = f1_score(y_test, knn_preds, average='weighted')
+macro_f1 = f1_score(y_test, knn_preds, average='macro')
+
+# 4. Printing Detailed Results
+print(f"=== K-Nearest Neighbors Performance Summary ===")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:  {accuracy:.4f}")
+print(f"Weighted Precision: {weighted_precision:.4f}")
+print(f"Weighted Recall:    {weighted_recall:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1:.4f}")
+print(f"Macro F1-Score:     {macro_f1:.4f}")
+print("-" * 45)
+
+# Per-Class Metrics Table
+p, r, f, _ = precision_recall_fscore_support(y_test, knn_preds, average=None)
+metrics_df = pd.DataFrame({'Class': class_names, 'Precision': p, 'Recall': r, 'F1-Score': f})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix with BOLD annotations
+cm = confusion_matrix(y_test, knn_preds)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('KNN Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+# Ensure y_test_bin is defined using label_binarize as in your previous steps
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], knn_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('KNN Per-Class ROC Curves')
+ax[1].set_xlabel('False Positive Rate')
+ax[1].set_ylabel('True Positive Rate')
+ax[1].legend(loc='lower right', fontsize='small')
+
+plt.tight_layout()
+plt.show()
+     
+Naive Bayes
+
+from sklearn.naive_bayes import GaussianNB
+
+# 1. Training with Timing
+start_train = time.time()
+nb_model = GaussianNB()
+nb_model.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 2. Testing with Timing
+start_test = time.time()
+nb_preds = nb_model.predict(X_test_scaled)
+nb_probs = nb_model.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 3. Overall Performance Metrics
+accuracy = accuracy_score(y_test, nb_preds)
+weighted_precision = precision_score(y_test, nb_preds, average='weighted')
+weighted_recall = recall_score(y_test, nb_preds, average='weighted')
+weighted_f1 = f1_score(y_test, nb_preds, average='weighted')
+macro_f1 = f1_score(y_test, nb_preds, average='macro')
+
+# 4. Printing Detailed Results
+print(f"=== Naive Bayes Performance Summary ===")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:   {accuracy:.4f}")
+print(f"Weighted Precision: {weighted_precision:.4f}")
+print(f"Weighted Recall:    {weighted_recall:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1:.4f}")
+print(f"Macro F1-Score:     {macro_f1:.4f}")
+print("-" * 45)
+
+# Per-Class Metrics Table
+p, r, f, _ = precision_recall_fscore_support(y_test, nb_preds, average=None)
+metrics_df = pd.DataFrame({'Class': class_names, 'Precision': p, 'Recall': r, 'F1-Score': f})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix with BOLD annotations
+cm = confusion_matrix(y_test, nb_preds)
+sns.heatmap(cm, annot=True, fmt='d', cmap='YlGnBu', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('Naive Bayes Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], nb_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('NB Per-Class ROC Curves')
+ax[1].set_xlabel('False Positive Rate')
+ax[1].set_ylabel('True Positive Rate')
+ax[1].legend(loc='lower right', fontsize='small')
+
+plt.tight_layout()
+plt.show()
+     
+Random Search to find the best parameter
+Hyperparameter Tuning: Random Forest
+We will tune the number of trees, the maximum depth, and the minimum samples required to split a node. After finding the best parameters, we will re-evaluate the model using your comprehensive metrics.
+
+
+from sklearn.model_selection import RandomizedSearchCV
+
+# 1. Define Parameter Grid
+rf_param_grid = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [None, 10, 20],
+    'min_samples_split': [2, 5, 10]
+}
+
+# 2. Randomized Search
+rf_random = RandomizedSearchCV(estimator=RandomForestClassifier(random_state=42),
+                               param_distributions=rf_param_grid,
+                               n_iter=10, cv=3, verbose=0, random_state=42, n_jobs=-1)
+
+start_train = time.time()
+rf_random.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 3. Predictions using the Best Model
+best_rf = rf_random.best_estimator_
+start_test = time.time()
+rf_preds = best_rf.predict(X_test_scaled)
+rf_probs = best_rf.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 4. Overall Metrics Calculation
+accuracy = accuracy_score(y_test, rf_preds)
+weighted_precision = precision_score(y_test, rf_preds, average='weighted')
+weighted_recall = recall_score(y_test, rf_preds, average='weighted')
+weighted_f1 = f1_score(y_test, rf_preds, average='weighted')
+macro_f1 = f1_score(y_test, rf_preds, average='macro')
+
+# 5. Printing Detailed Results (As requested)
+print(f"=== Tuned Random Forest Performance Summary ===")
+print(f"Best Params: {rf_random.best_params_}")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:   {accuracy:.4f}")
+print(f"Weighted Precision: {weighted_precision:.4f}")
+print(f"Weighted Recall:    {weighted_recall:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1:.4f}")
+print(f"Macro F1-Score:     {macro_f1:.4f}")
+print("-" * 45)
+
+# Per-Class Table
+p, r, f, _ = precision_recall_fscore_support(y_test, rf_preds, average=None)
+metrics_df = pd.DataFrame({'Class': class_names, 'Precision': p, 'Recall': r, 'F1-Score': f})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df.to_string(index=False))
+
+# 6. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# BOLD Confusion Matrix
+cm = confusion_matrix(y_test, rf_preds)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('Tuned RF Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], rf_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('Tuned RF Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.tight_layout()
+plt.show()
+     
+Hyperparameter Tuning: SVM
+For SVM, I will tune the regularization parameter C and the kernel type. Note: probability=True is kept to ensure we can still plot ROC curves.
+
+
+# 1. Define Parameter Grid
+svm_param_grid = {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
+
+# 2. Randomized Search
+svm_random = RandomizedSearchCV(estimator=SVC(probability=True, random_state=42),
+                                param_distributions=svm_param_grid,
+                                n_iter=5, cv=3, verbose=0, random_state=42, n_jobs=-1)
+
+start_train = time.time()
+svm_random.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 3. Predictions using the Best Model
+best_svm = svm_random.best_estimator_
+start_test = time.time()
+svm_preds = best_svm.predict(X_test_scaled)
+svm_probs = best_svm.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 4. Overall Metrics Calculation
+accuracy_svm = accuracy_score(y_test, svm_preds)
+weighted_precision_svm = precision_score(y_test, svm_preds, average='weighted')
+weighted_recall_svm = recall_score(y_test, svm_preds, average='weighted')
+weighted_f1_svm = f1_score(y_test, svm_preds, average='weighted')
+macro_f1_svm = f1_score(y_test, svm_preds, average='macro')
+
+# 5. Printing Detailed Results
+print(f"=== Tuned SVM Performance Summary ===")
+print(f"Best Params: {svm_random.best_params_}")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:   {accuracy_svm:.4f}")
+print(f"Weighted Precision: {weighted_precision_svm:.4f}")
+print(f"Weighted Recall:    {weighted_recall_svm:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1_svm:.4f}")
+print(f"Macro F1-Score:     {macro_f1_svm:.4f}")
+print("-" * 45)
+
+# Per-Class Table
+p_svm, r_svm, f_svm, _ = precision_recall_fscore_support(y_test, svm_preds, average=None)
+metrics_df_svm = pd.DataFrame({'Class': class_names, 'Precision': p_svm, 'Recall': r_svm, 'F1-Score': f_svm})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df_svm.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+sns.heatmap(confusion_matrix(y_test, svm_preds), annot=True, fmt='d', cmap='Oranges', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('Tuned SVM Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], svm_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('Tuned SVM Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.show()
+     
+Hyperparameter Tuning: Logistic Regression
+We tune the solver and the penalty (regularization strength C).
+
+
+# 1. Define Parameter Grid
+lr_param_grid = {'C': [0.1, 1, 10], 'solver': ['lbfgs', 'liblinear']}
+
+# 2. Randomized Search
+lr_random = RandomizedSearchCV(estimator=LogisticRegression(max_iter=1000, random_state=42),
+                               param_distributions=lr_param_grid,
+                               n_iter=5, cv=3, verbose=0, random_state=42, n_jobs=-1)
+
+start_train = time.time()
+lr_random.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 3. Predictions using the Best Model
+best_lr = lr_random.best_estimator_
+start_test = time.time()
+lr_preds = best_lr.predict(X_test_scaled)
+lr_probs = best_lr.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 4. Overall Metrics Calculation
+accuracy_lr = accuracy_score(y_test, lr_preds)
+weighted_precision_lr = precision_score(y_test, lr_preds, average='weighted')
+weighted_recall_lr = recall_score(y_test, lr_preds, average='weighted')
+weighted_f1_lr = f1_score(y_test, lr_preds, average='weighted')
+macro_f1_lr = f1_score(y_test, lr_preds, average='macro')
+
+# 5. Printing Detailed Results
+print(f"=== Tuned Logistic Regression Performance Summary ===")
+print(f"Best Params: {lr_random.best_params_}")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:   {accuracy_lr:.4f}")
+print(f"Weighted Precision: {weighted_precision_lr:.4f}")
+print(f"Weighted Recall:    {weighted_recall_lr:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1_lr:.4f}")
+print(f"Macro F1-Score:     {macro_f1_lr:.4f}")
+print("-" * 45)
+
+# Per-Class Table
+p_lr, r_lr, f_lr, _ = precision_recall_fscore_support(y_test, lr_preds, average=None)
+metrics_df_lr = pd.DataFrame({'Class': class_names, 'Precision': p_lr, 'Recall': r_lr, 'F1-Score': f_lr})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df_lr.to_string(index=False))
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+sns.heatmap(confusion_matrix(y_test, lr_preds), annot=True, fmt='d', cmap='Purples', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('Tuned LR Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], lr_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('Tuned LR Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.show()
+     
+Hyperparameter Tunning for KNN
+
+from sklearn.neighbors import KNeighborsClassifier
+
+# 1. Define Parameter Grid
+knn_param_grid = {
+    'n_neighbors': [3, 5, 11, 19],
+    'weights': ['uniform', 'distance'],
+    'metric': ['euclidean', 'manhattan']
+}
+
+# 2. Randomized Search
+knn_random = RandomizedSearchCV(estimator=KNeighborsClassifier(),
+                                param_distributions=knn_param_grid,
+                                n_iter=10, cv=3, verbose=0, random_state=42, n_jobs=-1)
+
+start_train = time.time()
+knn_random.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 3. Predictions using the Best Model
+best_knn = knn_random.best_estimator_
+start_test = time.time()
+knn_preds = best_knn.predict(X_test_scaled)
+knn_probs = best_knn.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 4. Overall Metrics Calculation
+accuracy_knn = accuracy_score(y_test, knn_preds)
+weighted_precision_knn = precision_score(y_test, knn_preds, average='weighted')
+weighted_recall_knn = recall_score(y_test, knn_preds, average='weighted')
+weighted_f1_knn = f1_score(y_test, knn_preds, average='weighted')
+macro_f1_knn = f1_score(y_test, knn_preds, average='macro')
+
+# 5. Printing Detailed Results
+print(f"=== Tuned KNN Performance Summary ===")
+print(f"Best Params: {knn_random.best_params_}")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:   {accuracy_knn:.4f}")
+print(f"Weighted Precision: {weighted_precision_knn:.4f}")
+print(f"Weighted Recall:    {weighted_recall_knn:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1_knn:.4f}")
+print(f"Macro F1-Score:     {macro_f1_knn:.4f}")
+print("-" * 45)
+
+# Per-Class Table
+p_knn, r_knn, f_knn, _ = precision_recall_fscore_support(y_test, knn_preds, average=None)
+metrics_df_knn = pd.DataFrame({'Class': class_names, 'Precision': p_knn, 'Recall': r_knn, 'F1-Score': f_knn})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df_knn.to_string(index=False))
+
+# 6. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+sns.heatmap(confusion_matrix(y_test, knn_preds), annot=True, fmt='d', cmap='Greens', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('Tuned KNN Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], knn_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('Tuned KNN Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.tight_layout()
+plt.show()
+     
+Hyperparameter Tunning for GaussianNB
+
+import numpy as np
+from sklearn.naive_bayes import GaussianNB
+
+# 1. Define Parameter Grid
+# var_smoothing is typically tuned on a log scale
+nb_param_grid = {'var_smoothing': np.logspace(0, -9, num=100)}
+
+# 2. Randomized Search
+nb_random = RandomizedSearchCV(estimator=GaussianNB(),
+                               param_distributions=nb_param_grid,
+                               n_iter=20, cv=3, verbose=0, random_state=42, n_jobs=-1)
+
+start_train = time.time()
+nb_random.fit(X_train_scaled, y_train)
+train_time = time.time() - start_train
+
+# 3. Predictions using the Best Model
+best_nb = nb_random.best_estimator_
+start_test = time.time()
+nb_preds = best_nb.predict(X_test_scaled)
+nb_probs = best_nb.predict_proba(X_test_scaled)
+test_time = time.time() - start_test
+
+# 4. Overall Metrics Calculation
+accuracy_nb = accuracy_score(y_test, nb_preds)
+weighted_precision_nb = precision_score(y_test, nb_preds, average='weighted')
+weighted_recall_nb = recall_score(y_test, nb_preds, average='weighted')
+weighted_f1_nb = f1_score(y_test, nb_preds, average='weighted')
+macro_f1_nb = f1_score(y_test, nb_preds, average='macro')
+
+# 5. Printing Detailed Results
+print(f"=== Tuned Naive Bayes Performance Summary ===")
+print(f"Best Params: {nb_random.best_params_}")
+print(f"Training Time: {train_time:.4f}s | Testing Time: {test_time:.4f}s")
+print("-" * 45)
+print(f"Overall Accuracy:   {accuracy_nb:.4f}")
+print(f"Weighted Precision: {weighted_precision_nb:.4f}")
+print(f"Weighted Recall:    {weighted_recall_nb:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1_nb:.4f}")
+print(f"Macro F1-Score:     {macro_f1_nb:.4f}")
+print("-" * 45)
+
+# Per-Class Table
+p_nb, r_nb, f_nb, _ = precision_recall_fscore_support(y_test, nb_preds, average=None)
+metrics_df_nb = pd.DataFrame({'Class': class_names, 'Precision': p_nb, 'Recall': r_nb, 'F1-Score': f_nb})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df_nb.to_string(index=False))
+
+# 6. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix
+sns.heatmap(confusion_matrix(y_test, nb_preds), annot=True, fmt='d', cmap='YlGnBu', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('Tuned NB Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], nb_probs[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('Tuned NB Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.show()
+     
+Cross-Validation Comparison: Random Forest, SVM, and Logistic Regression
+In this section, we evaluate the stability of our optimized models using 10-Fold Cross-Validation. We will use the best_rf, best_svm, and best_lr estimators found during our hyperparameter tuning phase.
+
+
+from sklearn.model_selection import cross_val_score, KFold
+
+# 1. Setup K-Fold
+k_folds = 10
+kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
+
+# Ensure full scaled features are ready
+# (Assuming X and y are your original full dataset variables)
+from sklearn.preprocessing import StandardScaler
+full_scaler = StandardScaler()
+X_scaled_full = full_scaler.fit_transform(X)
+
+# 2. Define ALL models to evaluate (including the new ones)
+models_to_cv = {
+    "Tuned Random Forest": best_rf,
+    "Tuned SVM": best_svm,
+    "Tuned Logistic Regression": best_lr,
+    "Tuned KNN": best_knn,      # Added
+    "Tuned Naive Bayes": best_nb # Added
+}
+
+cv_results = {}
+
+print(f"Performing {k_folds}-Fold Cross-Validation...")
+print("-" * 55)
+
+# 3. Iterate through models and calculate scores
+for name, model in models_to_cv.items():
+    start_time = time.time()
+    # Using n_jobs=-1 to speed up the 10-fold process
+    scores = cross_val_score(model, X_scaled_full, y, cv=kf, scoring='accuracy', n_jobs=-1)
+    duration = time.time() - start_time
+
+    cv_results[name] = scores
+
+    print(f"{name}:")
+    print(f"  Mean Accuracy: {scores.mean():.4f}")
+    print(f"  Std Deviation: {scores.std():.4f}")
+    print(f"  Time Taken:    {duration:.2f}s")
+    print("-" * 55)
+
+# 4. Summary Visualization (Boxplot)
+plt.figure(figsize=(14, 7))
+# Create the boxplot
+plt.boxplot(cv_results.values(), labels=cv_results.keys(), patch_artist=True,
+            boxprops=dict(facecolor='#D1E8FF', color='blue'),
+            medianprops=dict(color='red', linewidth=2))
+
+plt.title(f'K-Fold Cross-Validation Accuracy Comparison (K={k_folds})', fontsize=14)
+plt.ylabel('Accuracy', fontsize=12)
+plt.xticks(rotation=15) # Rotate labels slightly for better readability
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.show()
+     
+
+
+     
+
+pip install imbalanced-learn -q
+     
+Balancing Classes with SMOTE
+SMOTE (Synthetic Minority Over-sampling Technique) is an oversampling method that generates synthetic samples from the minority class. This technique helps to mitigate the bias that machine learning models might develop towards majority classes in imbalanced datasets, leading to improved predictive performance for minority classes.
+
+
+import matplotlib.pyplot as plt
+import pandas as pd
+from imblearn.over_sampling import SMOTE
+
+# Initialize SMOTE
+smote = SMOTE(random_state=42)
+
+# Apply SMOTE to the training data
+X_train_resampled, y_train_resampled = smote.fit_resample(X_train_scaled, y_train)
+
+# Visualization code
+fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+# Original class distribution
+y_train.value_counts().plot(kind='bar', ax=ax[0], color=['skyblue', 'salmon'])
+ax[0].set_title('Original Class Distribution')
+ax[0].set_ylabel('Count')
+
+# Resampled class distribution
+pd.Series(y_train_resampled).value_counts().plot(kind='bar', ax=ax[1], color=['skyblue', 'salmon'])
+ax[1].set_title('Resampled Class Distribution (After SMOTE)')
+ax[1].set_ylabel('Count')
+
+plt.tight_layout()
+plt.show()
+     
+Random Forest with SMOTE - Training and Comprehensive Evaluation
+This cell trains the Random Forest classifier on the SMOTE-resampled data, measures training/testing time, calculates overall and per-class metrics, and visualizes the results with a Confusion Matrix and ROC Curves.
+
+
+import time
+from sklearn.metrics import (accuracy_score, precision_score, recall_score,
+                             f1_score, confusion_matrix, roc_curve, auc,
+                             precision_recall_fscore_support)
+from sklearn.preprocessing import label_binarize
+
+# 1. Training with Timing using SMOTE-resampled data
+start_train = time.time()
+# Using the best parameters found during hyperparameter tuning
+rf_model_smote = RandomForestClassifier(n_estimators=best_rf.n_estimators,
+                                        max_depth=best_rf.max_depth,
+                                        min_samples_split=best_rf.min_samples_split,
+                                        random_state=42)
+rf_model_smote.fit(X_train_resampled, y_train_resampled)
+train_time_smote = time.time() - start_train
+
+# 2. Testing with Timing
+start_test = time.time()
+rf_preds_smote = rf_model_smote.predict(X_test_scaled)
+rf_probs_smote = rf_model_smote.predict_proba(X_test_scaled)
+test_time_smote = time.time() - start_test
+
+# 3. Overall Performance Metrics
+accuracy_smote = accuracy_score(y_test, rf_preds_smote)
+weighted_precision_smote = precision_score(y_test, rf_preds_smote, average='weighted')
+weighted_recall_smote = recall_score(y_test, rf_preds_smote, average='weighted')
+weighted_f1_smote = f1_score(y_test, rf_preds_smote, average='weighted')
+macro_f1_smote = f1_score(y_test, rf_preds_smote, average='macro')
+
+# 4. Printing Detailed Results
+print(f"=== Random Forest (with SMOTE) Performance Summary ===")
+print(f"Training Time: {train_time_smote:.4f}s | Testing Time: {test_time_smote:.4f}s")
+print("-" * 60)
+print(f"Overall Accuracy:  {accuracy_smote:.4f}")
+print(f"Weighted Precision: {weighted_precision_smote:.4f}")
+print(f"Weighted Recall:    {weighted_recall_smote:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1_smote:.4f}")
+print(f"Macro F1-Score:     {macro_f1_smote:.4f}")
+print("-" * 60)
+
+# Per-Class Metrics Table
+class_names = le.classes_
+p_smote, r_smote, f_smote, _ = precision_recall_fscore_support(y_test, rf_preds_smote, average=None)
+metrics_df_smote = pd.DataFrame({'Class': class_names, 'Precision': p_smote, 'Recall': r_smote, 'F1-Score': f_smote})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df_smote.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix with BOLD annotations
+cm_smote = confusion_matrix(y_test, rf_preds_smote)
+sns.heatmap(cm_smote,
+            annot=True,
+            fmt='d',
+            cmap='Blues',
+            ax=ax[0],
+            xticklabels=class_names,
+            yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+
+ax[0].set_title('Random Forest (SMOTE) Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+y_test_bin = label_binarize(y_test, classes=range(len(class_names)))
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], rf_probs_smote[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('Random Forest (SMOTE) Per-Class ROC Curves')
+ax[1].set_xlabel('False Positive Rate')
+ax[1].set_ylabel('True Positive Rate')
+ax[1].legend(loc='lower right', fontsize='small')
+
+plt.tight_layout()
+plt.show()
+     
+Support Vector Machine (SVM) with SMOTE - Training and Evaluation
+This cell trains the SVM model using the SMOTE-resampled training data and evaluates its performance with comprehensive metrics and visualizations.
+
+
+from sklearn.svm import SVC
+
+# 1. Training with Timing using SMOTE-resampled data
+start_train = time.time()
+# Using the best parameters found during hyperparameter tuning
+svm_model_smote = SVC(kernel=best_svm.kernel, C=best_svm.C, probability=True, random_state=42)
+svm_model_smote.fit(X_train_resampled, y_train_resampled)
+train_time_smote_svm = time.time() - start_train
+
+# 2. Testing with Timing
+start_test = time.time()
+svm_preds_smote = svm_model_smote.predict(X_test_scaled)
+svm_probs_smote = svm_model_smote.predict_proba(X_test_scaled)
+test_time_smote_svm = time.time() - start_test
+
+# 3. Overall Performance Metrics
+accuracy_smote_svm = accuracy_score(y_test, svm_preds_smote)
+weighted_precision_smote_svm = precision_score(y_test, svm_preds_smote, average='weighted')
+weighted_recall_smote_svm = recall_score(y_test, svm_preds_smote, average='weighted')
+weighted_f1_smote_svm = f1_score(y_test, svm_preds_smote, average='weighted')
+macro_f1_smote_svm = f1_score(y_test, svm_preds_smote, average='macro')
+
+# 4. Printing Detailed Results
+print(f"=== SVM (with SMOTE) Performance Summary ===")
+print(f"Training Time: {train_time_smote_svm:.4f}s | Testing Time: {test_time_smote_svm:.4f}s")
+print("-" * 60)
+print(f"Overall Accuracy:   {accuracy_smote_svm:.4f}")
+print(f"Weighted Precision: {weighted_precision_smote_svm:.4f}")
+print(f"Weighted Recall:    {weighted_recall_smote_svm:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1_smote_svm:.4f}")
+print(f"Macro F1-Score:     {macro_f1_smote_svm:.4f}")
+print("-" * 60)
+
+# Per-Class Metrics Table
+p_smote_svm, r_smote_svm, f_smote_svm, _ = precision_recall_fscore_support(y_test, svm_preds_smote, average=None)
+metrics_df_smote_svm = pd.DataFrame({'Class': class_names, 'Precision': p_smote_svm, 'Recall': r_smote_svm, 'F1-Score': f_smote_svm})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df_smote_svm.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix with BOLD annotations
+cm_smote_svm = confusion_matrix(y_test, svm_preds_smote)
+sns.heatmap(cm_smote_svm, annot=True, fmt='d', cmap='Oranges', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('SVM (SMOTE) Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], svm_probs_smote[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('SVM (SMOTE) Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.tight_layout()
+plt.show()
+     
+Logistic Regression with SMOTE - Training and Evaluation
+This cell trains the Logistic Regression model using the SMOTE-resampled training data and evaluates its performance with comprehensive metrics and visualizations.
+
+
+from sklearn.linear_model import LogisticRegression
+
+# 1. Training with Timing using SMOTE-resampled data
+start_train = time.time()
+lr_model_smote = LogisticRegression(C=best_lr.C, solver=best_lr.solver, max_iter=1000, random_state=42)
+lr_model_smote.fit(X_train_resampled, y_train_resampled)
+train_time_smote_lr = time.time() - start_train
+
+# 2. Testing with Timing
+start_test = time.time()
+lr_preds_smote = lr_model_smote.predict(X_test_scaled)
+lr_probs_smote = lr_model_smote.predict_proba(X_test_scaled)
+test_time_smote_lr = time.time() - start_test
+
+# 3. Overall Performance Metrics
+accuracy_smote_lr = accuracy_score(y_test, lr_preds_smote)
+weighted_precision_smote_lr = precision_score(y_test, lr_preds_smote, average='weighted')
+weighted_recall_smote_lr = recall_score(y_test, lr_preds_smote, average='weighted')
+weighted_f1_smote_lr = f1_score(y_test, lr_preds_smote, average='weighted')
+macro_f1_smote_lr = f1_score(y_test, lr_preds_smote, average='macro')
+
+# 4. Printing Detailed Results
+print(f"=== Logistic Regression (with SMOTE) Performance Summary ===")
+print(f"Training Time: {train_time_smote_lr:.4f}s | Testing Time: {test_time_smote_lr:.4f}s")
+print("-" * 60)
+print(f"Overall Accuracy:   {accuracy_smote_lr:.4f}")
+print(f"Weighted Precision: {weighted_precision_smote_lr:.4f}")
+print(f"Weighted Recall:    {weighted_recall_smote_lr:.4f}")
+print(f"Weighted F1-Score:  {weighted_f1_smote_lr:.4f}")
+print(f"Macro F1-Score:     {macro_f1_smote_lr:.4f}")
+print("-" * 60)
+
+# Per-Class Metrics Table
+p_smote_lr, r_smote_lr, f_smote_lr, _ = precision_recall_fscore_support(y_test, lr_preds_smote, average=None)
+metrics_df_smote_lr = pd.DataFrame({'Class': class_names, 'Precision': p_smote_lr, 'Recall': r_smote_lr, 'F1-Score': f_smote_lr})
+print("\nPer-Class Detailed Metrics:")
+print(metrics_df_smote_lr.to_string(index=False))
+
+# 5. Visualizations
+fig, ax = plt.subplots(1, 2, figsize=(20, 8))
+
+# Confusion Matrix with BOLD annotations
+cm_smote_lr = confusion_matrix(y_test, lr_preds_smote)
+sns.heatmap(cm_smote_lr, annot=True, fmt='d', cmap='Purples', ax=ax[0],
+            xticklabels=class_names, yticklabels=class_names,
+            annot_kws={'weight': 'bold', 'size': 12})
+ax[0].set_title('LR (SMOTE) Confusion Matrix')
+ax[0].set_xticklabels(class_names, rotation=45, ha='right')
+
+# Per-Class ROC Curve
+for i in range(len(class_names)):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], lr_probs_smote[:, i])
+    ax[1].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {auc(fpr, tpr):.2f})')
+
+ax[1].plot([0, 1], [0, 1], 'k--')
+ax[1].set_title('LR (SMOTE) Per-Class ROC Curves')
+ax[1].legend(loc='lower right', fontsize='small')
+plt.tight_layout()
+plt.show()
+     
+Explainable AI (XAI): SHAP Analysis for Tuned SVM
+In this section, I use SHAP values to explain the model's decisions. We will use a KernelExplainer because it is model-agnostic and works perfectly with the Tuned SVM. Note: We use a small representative sample of the data for the background to speed up the computation in Colab.
+
+
+# Install SHAP if not already present
+!pip install shap -q
+
+import shap
+
+     
+
+
+# 1. Prepare a background dataset for the explainer
+# We use 50-100 samples to keep the computation time reasonable in Colab
+background = shap.sample(X_train_scaled, 100)
+explainer = shap.KernelExplainer(best_svm.predict_proba, background)
+
+# 2. Calculate SHAP values for a subset of the test data
+# Increasing 'nsamples' improves accuracy but increases computation time
+test_samples = shap.sample(X_test_scaled, 50)
+shap_values = explainer.shap_values(test_samples)
+
+# 3. Visualization: Feature Importance Summary
+print("Generating SHAP Summary Plot...")
+# Since it's multi-class, we plot the contribution for all classes
+plt.figure(figsize=(10, 15))
+shap.summary_plot(shap_values, test_samples, feature_names=X.columns, show=False)
+plt.title("SHAP Summary Plot: Feature Influence across Obesity Levels")
+plt.show()
+     
+
+# 1. Reshape/Average SHAP values correctly
+# Current shape is (50, 16, 7) -> (samples, features, classes)
+# We want the mean absolute importance for each of the 16 features
+# We take the absolute value, then average across classes (axis 2) and samples (axis 0)
+global_shap_importance = np.abs(shap_values).mean(axis=(0, 2))
+
+# 2. Create the DataFrame for Ranking
+# global_shap_importance now has length 16, matching test_samples.columns
+feature_importance_df = pd.DataFrame({
+    'Feature': test_samples.columns.tolist(),
+    'Importance': global_shap_importance
+}).sort_values(by='Importance', ascending=False)
+
+# 3. Categorize Features for the Research Question
+behavioral_habits = ['FAVC', 'FCVC', 'NCP', 'CAEC', 'CH2O', 'SCC', 'CALC', 'MTRANS']
+physical_activity = ['FAF', 'TUE']
+
+def categorize(feature):
+    if feature in behavioral_habits: return 'Behavioral Eating Habit'
+    if feature in physical_activity: return 'Physical Activity/Lifestyle'
+    return 'Biological/Demographic'
+
+feature_importance_df['Category'] = feature_importance_df['Feature'].apply(categorize)
+
+# 4. Display Results
+print("Top Influential Features for WHO Classification:")
+print(feature_importance_df.head(10).to_string(index=False))
+
+# 5. Visualization
+plt.figure(figsize=(12, 7))
+sns.barplot(data=feature_importance_df, x='Importance', y='Feature', hue='Category', dodge=False, palette='viridis')
+plt.title('Impact of Behavioral vs. Physical Factors on Obesity Classification (SHAP)')
+plt.xlabel('Mean |SHAP Value| (Feature Importance)')
+plt.grid(axis='x', alpha=0.3)
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.show()
+     
